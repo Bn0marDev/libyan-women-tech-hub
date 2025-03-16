@@ -15,11 +15,15 @@ import { supabase } from "./integrations/supabase/client";
 
 // تمكين الوقت الفعلي (Realtime) للمنشورات والإعجابات
 const enableRealtimeForTables = async () => {
-  await supabase.rpc('supabase_realtime', { enable_realtime: true }).then(() => {
+  try {
+    // أضف هنا الجداول التي تريد تفعيل الوقت الفعلي لها
+    await supabase.rpc('supabase_realtime', { table: 'posts' });
+    await supabase.rpc('supabase_realtime', { table: 'likes' });
+    await supabase.rpc('supabase_realtime', { table: 'comments' });
     console.log('تم تفعيل الوقت الفعلي');
-  }).catch((error) => {
+  } catch (error) {
     console.error('خطأ في تفعيل الوقت الفعلي:', error);
-  });
+  }
 };
 
 const queryClient = new QueryClient();
