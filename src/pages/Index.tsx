@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/use-toast";
 import Navbar from "@/components/Navbar";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
+import WelcomeMessage from "@/components/WelcomeMessage";
 
 const Index = () => {
   const { user, profile } = useAuth();
@@ -26,30 +27,84 @@ const Index = () => {
 
   useEffect(() => {
     fetchPosts();
+    
+    // إعداد مستمع للتغييرات في الوقت الفعلي
+    const postsChannel = supabase
+      .channel('public:posts')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'posts' 
+      }, (payload) => {
+        console.log('تغيير في المنشورات:', payload);
+        fetchPosts();
+      })
+      .subscribe();
+      
+    const likesChannel = supabase
+      .channel('public:likes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'likes' 
+      }, (payload) => {
+        console.log('تغيير في الإعجابات:', payload);
+        fetchPosts();
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(postsChannel);
+      supabase.removeChannel(likesChannel);
+    };
   }, []);
 
   const fetchPosts = async () => {
     setLoadingPosts(true);
     try {
-      const { data, error } = await supabase
+      // تعديل الاستعلام ليتضمن معلومات ما إذا كان المستخدم الحالي قد أعجب بالمنشور
+      let query = supabase
         .from("posts")
         .select(`
           *,
           profiles:user_id (id, username, avatar_url, is_verified)
         `)
         .order("created_at", { ascending: false });
+        
+      // إضافة معلومات الإعجابات للمستخدم الحالي إذا كان مسجلاً
+      const { data, error } = await query;
       
       if (error) throw error;
-      setPosts(data || []);
+      
+      let postsWithLikes = data || [];
+      
+      // إذا كان المستخدم مسجلاً، سنضيف معلومات الإعجابات
+      if (user) {
+        const { data: userLikes, error: likesError } = await supabase
+          .from("likes")
+          .select("post_id")
+          .eq("user_id", user.id);
+          
+        if (!likesError && userLikes) {
+          const userLikedPostIds = userLikes.map(like => like.post_id);
+          postsWithLikes = postsWithLikes.map(post => ({
+            ...post,
+            user_has_liked: userLikedPostIds.includes(post.id)
+          }));
+        }
+      }
+      
+      setPosts(postsWithLikes);
       
       // تحميل التعليقات للمنشورات الأولى
-      if (data && data.length > 0) {
-        const firstPosts = data.slice(0, 5);
+      if (postsWithLikes && postsWithLikes.length > 0) {
+        const firstPosts = postsWithLikes.slice(0, 5);
         firstPosts.forEach(post => {
           fetchComments(post.id);
         });
       }
     } catch (error: any) {
+      console.error("خطأ في جلب المنشورات:", error.message);
       toast({
         title: "خطأ في جلب المنشورات",
         description: error.message,
@@ -118,6 +173,12 @@ const Index = () => {
         setNewComment(prev => ({ ...prev, [postId]: "" }));
         // إعادة تحميل التعليقات
         await fetchComments(postId);
+        
+        // إرسال إشعار لصاحب المنشور
+        const postOwnerId = posts.find(post => post.id === postId)?.user_id;
+        if (postOwnerId && postOwnerId !== user.id) {
+          // هنا يمكن إضافة منطق إرسال الإشعارات لاحقاً
+        }
       }
     } catch (error: any) {
       toast({
@@ -148,7 +209,7 @@ const Index = () => {
         .select("*")
         .eq("post_id", postId)
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
       
       if (fetchError && !fetchError.message.includes("No rows found")) {
         throw fetchError;
@@ -163,10 +224,10 @@ const Index = () => {
         
         if (error) throw error;
         
-        // تحديث المنشورات
+        // تحديث حالة المنشورات محلياً
         setPosts(prev => prev.map(post => 
           post.id === postId 
-            ? { ...post, likes_count: post.likes_count - 1, user_has_liked: false } 
+            ? { ...post, likes_count: Math.max(0, (post.likes_count || 1) - 1), user_has_liked: false } 
             : post
         ));
       } else {
@@ -189,15 +250,22 @@ const Index = () => {
             throw error;
           }
         } else {
-          // تحديث المنشورات
+          // تحديث حالة المنشورات محلياً
           setPosts(prev => prev.map(post => 
             post.id === postId 
-              ? { ...post, likes_count: post.likes_count + 1, user_has_liked: true } 
+              ? { ...post, likes_count: (post.likes_count || 0) + 1, user_has_liked: true } 
               : post
           ));
+          
+          // إرسال إشعار لصاحب المنشور
+          const postOwnerId = posts.find(post => post.id === postId)?.user_id;
+          if (postOwnerId && postOwnerId !== user.id) {
+            // هنا يمكن إضافة منطق إرسال الإشعارات لاحقاً
+          }
         }
       }
     } catch (error: any) {
+      console.error("خطأ في تحديث الإعجاب:", error.message);
       toast({
         title: "خطأ في تحديث الإعجاب",
         description: error.message,
@@ -214,24 +282,7 @@ const Index = () => {
       
       <div className="container mx-auto py-8 px-4">
         <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
-              منصة المرأة الليبية في التكنولوجيا
-            </h1>
-            <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
-              منصة تعليمية وتفاعلية لتمكين النساء الليبيات في مجالات التكنولوجيا
-            </p>
-            
-            {!user && (
-              <Button 
-                onClick={() => navigate("/auth")} 
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                size="lg"
-              >
-                انضمي إلينا
-              </Button>
-            )}
-          </div>
+          <WelcomeMessage />
           
           {loadingPosts ? (
             <div className="flex justify-center py-12">
@@ -254,11 +305,12 @@ const Index = () => {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: index * 0.1 }}
+                  whileHover={{ y: -5 }}
                 >
-                  <GlassCard className="overflow-hidden">
+                  <GlassCard className="overflow-hidden hover:shadow-xl transition-all duration-300">
                     <div className="p-6">
                       <div className="flex items-start mb-4">
-                        <Avatar className="h-10 w-10 mr-3">
+                        <Avatar className="h-10 w-10 ml-3">
                           <AvatarImage src={post.profiles.avatar_url} />
                           <AvatarFallback>
                             {post.profiles.username?.substring(0, 2).toUpperCase() || "UN"}
@@ -270,7 +322,7 @@ const Index = () => {
                               {post.profiles.username}
                             </Link>
                             {post.profiles.is_verified && (
-                              <span className="ml-1 text-yellow-500">
+                              <span className="mr-1 text-yellow-500">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                                   <path fillRule="evenodd" d="M8.603 3.799A4.49 4.49 0 0112 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 013.498 1.307 4.491 4.491 0 011.307 3.497A4.49 4.49 0 0121.75 12a4.49 4.49 0 01-1.549 3.397 4.491 4.491 0 01-1.307 3.497 4.491 4.491 0 01-3.497 1.307A4.49 4.49 0 0112 21.75a4.49 4.49 0 01-3.397-1.549 4.49 4.49 0 01-3.498-1.306 4.491 4.491 0 01-1.307-3.498A4.49 4.49 0 012.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 011.307-3.497 4.49 4.49 0 013.497-1.307zm7.007 6.387a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
                                 </svg>
@@ -301,11 +353,11 @@ const Index = () => {
                           className="text-gray-600 dark:text-gray-300 hover:text-red-500 dark:hover:text-red-400"
                         >
                           {loadingLikes[post.id] ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            <Loader2 className="h-4 w-4 animate-spin ml-2" />
                           ) : (
-                            <Heart className={`h-4 w-4 mr-2 ${post.user_has_liked ? "fill-red-500 text-red-500" : "fill-none"}`} />
+                            <Heart className={`h-4 w-4 ml-2 ${post.user_has_liked ? "fill-red-500 text-red-500" : "fill-none"}`} />
                           )}
-                          {post.likes_count}
+                          {post.likes_count || 0}
                         </Button>
                         
                         <Button
@@ -318,7 +370,7 @@ const Index = () => {
                           }}
                           className="text-gray-600 dark:text-gray-300"
                         >
-                          <MessageCircle className="h-4 w-4 mr-2" />
+                          <MessageCircle className="h-4 w-4 ml-2" />
                           {comments[post.id]?.length || 0} تعليق
                         </Button>
                       </div>
@@ -392,7 +444,7 @@ const Index = () => {
                                         {comment.profiles.username}
                                       </p>
                                       {comment.profiles.is_verified && (
-                                        <span className="ml-1 text-yellow-500">
+                                        <span className="mr-1 text-yellow-500">
                                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3">
                                             <path fillRule="evenodd" d="M8.603 3.799A4.49 4.49 0 0112 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 013.498 1.307 4.491 4.491 0 011.307 3.497A4.49 4.49 0 0121.75 12a4.49 4.49 0 01-1.549 3.397 4.491 4.491 0 01-1.307 3.497 4.491 4.491 0 01-3.497 1.307A4.49 4.49 0 0112 21.75a4.49 4.49 0 01-3.397-1.549 4.49 4.49 0 01-3.498-1.306 4.491 4.491 0 01-1.307-3.498A4.49 4.49 0 012.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 011.307-3.497 4.49 4.49 0 013.497-1.307zm7.007 6.387a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
                                           </svg>

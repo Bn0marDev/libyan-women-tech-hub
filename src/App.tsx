@@ -11,6 +11,16 @@ import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./context/AuthContext";
 import { useEffect } from "react";
+import { supabase } from "./integrations/supabase/client";
+
+// تمكين الوقت الفعلي (Realtime) للمنشورات والإعجابات
+const enableRealtimeForTables = async () => {
+  await supabase.rpc('supabase_realtime', { enable_realtime: true }).then(() => {
+    console.log('تم تفعيل الوقت الفعلي');
+  }).catch((error) => {
+    console.error('خطأ في تفعيل الوقت الفعلي:', error);
+  });
+};
 
 const queryClient = new QueryClient();
 
@@ -31,6 +41,9 @@ const App = () => {
     // إضافة اتجاه RTL للمستند
     document.documentElement.dir = "rtl";
     document.body.classList.add("font-sans");
+    
+    // تفعيل الوقت الفعلي
+    enableRealtimeForTables();
   }, []);
 
   return (

@@ -3,7 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Menu, LogOut, User, Settings, Home } from "lucide-react";
+import { Bell, Menu, LogOut, User, Settings, Home, Bookmark } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import {
   DropdownMenu,
@@ -13,12 +13,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Navbar = () => {
   const { user, profile, signOut, isAdmin, isVerified } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+  const { toast } = useToast();
 
   const handleSignOut = async () => {
     await signOut();
@@ -35,6 +40,19 @@ const Navbar = () => {
   const toggleMobileMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
+
+  // في المستقبل، يمكن إضافة وظيفة لجلب الإشعارات
+  const fetchNotifications = async () => {
+    if (!user) return;
+    
+    // هنا يمكن إضافة المنطق لجلب إشعارات المستخدم من قاعدة البيانات
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    
+    // في المستقبل، يمكن إضافة مستمع للإشعارات في الوقت الفعلي
+  }, [user]);
 
   return (
     <nav className="sticky top-0 z-40 w-full backdrop-blur-lg bg-white bg-opacity-30 dark:bg-gray-900 dark:bg-opacity-30 border-b border-gray-200 dark:border-gray-800">
@@ -54,6 +72,34 @@ const Navbar = () => {
                 <Button variant="ghost" asChild>
                   <Link to="/">الرئيسية</Link>
                 </Button>
+                
+                {/* زر الإشعارات */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative" size="icon">
+                      <Bell className="h-5 w-5" />
+                      {hasUnreadNotifications && (
+                        <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-80">
+                    <DropdownMenuLabel>الإشعارات</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-center text-gray-500">
+                        لا توجد إشعارات جديدة
+                      </div>
+                    ) : (
+                      notifications.map((notification) => (
+                        <DropdownMenuItem key={notification.id}>
+                          {/* محتوى الإشعار */}
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative">
