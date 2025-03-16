@@ -1,9 +1,11 @@
+
 import { useAuth } from "@/context/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Bell, Menu, LogOut, User, Settings, Home, Bookmark } from "lucide-react";
+import { Menu, LogOut, User, Settings, Home } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
+import NotificationDropdown from "./NotificationDropdown";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,17 +14,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useEffect, useState } from "react";
-import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
 
 const Navbar = () => {
-  const { user, profile, signOut, isAdmin, isVerified } = useAuth();
+  const { user, profile, signOut, isAdmin, isVerified, verifyAccount } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
-  const { toast } = useToast();
 
   const handleSignOut = async () => {
     await signOut();
@@ -40,60 +37,9 @@ const Navbar = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
 
-  const fetchNotifications = async () => {
-    if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(10);
-        
-      if (error) throw error;
-      
-      setNotifications(data || []);
-      setHasUnreadNotifications(data?.some(notif => !notif.read));
-    } catch (error) {
-      console.error("خطأ في جلب الإشعارات:", error);
-    }
+  const handleVerifyAccount = async () => {
+    await verifyAccount();
   };
-
-  const markNotificationAsRead = async (notificationId: string) => {
-    try {
-      await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("id", notificationId);
-        
-      await fetchNotifications();
-    } catch (error) {
-      console.error("خطأ في تحديث حالة الإشعار:", error);
-    }
-  };
-
-  useEffect(() => {
-    if (user) {
-      fetchNotifications();
-      
-      const notificationsChannel = supabase
-        .channel('public:notifications')
-        .on('postgres_changes', { 
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`
-        }, () => {
-          fetchNotifications();
-        })
-        .subscribe();
-        
-      return () => {
-        supabase.removeChannel(notificationsChannel);
-      };
-    }
-  }, [user]);
 
   return (
     <nav className="sticky top-0 z-40 w-full backdrop-blur-lg bg-white bg-opacity-30 dark:bg-gray-900 dark:bg-opacity-30 border-b border-gray-200 dark:border-gray-800">
@@ -113,31 +59,7 @@ const Navbar = () => {
                   <Link to="/">الرئيسية</Link>
                 </Button>
                 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative" size="icon">
-                      <Bell className="h-5 w-5" />
-                      {hasUnreadNotifications && (
-                        <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-80">
-                    <DropdownMenuLabel>الإشعارات</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {notifications.length === 0 ? (
-                      <div className="p-4 text-center text-gray-500">
-                        لا توجد إشعارات جديدة
-                      </div>
-                    ) : (
-                      notifications.map((notification) => (
-                        <DropdownMenuItem key={notification.id} onClick={() => markNotificationAsRead(notification.id)}>
-                          {/* محتوى الإشعار */}
-                        </DropdownMenuItem>
-                      ))
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <NotificationDropdown />
                 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -167,6 +89,12 @@ const Navbar = () => {
                       <DropdownMenuItem onClick={() => navigate("/admin")}>
                         <Settings className="mr-2 h-4 w-4" />
                         <span>لوحة الإدارة</span>
+                      </DropdownMenuItem>
+                    )}
+                    {!isVerified && (
+                      <DropdownMenuItem onClick={handleVerifyAccount}>
+                        <span className="mr-2 text-yellow-500 text-sm">★</span>
+                        <span>توثيق الحساب</span>
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
@@ -217,6 +145,12 @@ const Navbar = () => {
                 <Button variant="ghost" onClick={() => navigate("/admin")} className="w-full justify-start">
                   <Settings className="mr-2 h-4 w-4" />
                   <span>لوحة الإدارة</span>
+                </Button>
+              )}
+              {!isVerified && (
+                <Button variant="ghost" onClick={handleVerifyAccount} className="w-full justify-start">
+                  <span className="mr-2 text-yellow-500 text-sm">★</span>
+                  <span>توثيق الحساب</span>
                 </Button>
               )}
               <Button variant="ghost" onClick={handleSignOut} className="w-full justify-start">

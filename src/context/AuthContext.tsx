@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -12,6 +13,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, username: string) => Promise<{ error: any | null }>;
   signOut: () => Promise<void>;
   loading: boolean;
+  verifyAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -164,6 +166,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const verifyAccount = async () => {
+    if (!user) {
+      toast({
+        title: "خطأ",
+        description: "يجب تسجيل الدخول أولاً",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ is_verified: true })
+        .eq("id", user.id);
+        
+      if (error) throw error;
+      
+      // تحديث حالة المستخدم محلياً
+      setProfile({
+        ...profile,
+        is_verified: true
+      });
+      
+      toast({
+        title: "تم توثيق الحساب بنجاح",
+        description: "الآن حسابك موثق في المنصة",
+      });
+    } catch (error: any) {
+      toast({
+        title: "خطأ في توثيق الحساب",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const value = {
     user,
     profile,
@@ -173,6 +212,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signUp,
     signOut,
     loading,
+    verifyAccount,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
