@@ -16,18 +16,39 @@ import { supabase } from "./integrations/supabase/client";
 // تمكين الوقت الفعلي (Realtime) للمنشورات والإعجابات
 const enableRealtimeForTables = async () => {
   try {
-    // إضافة الجداول للنشر الوقت الفعلي
-    await supabase.from('posts').on('INSERT', payload => {
-      console.log('منشور جديد:', payload);
-    }).subscribe();
+    // إضافة الجداول للنشر الوقت الفعلي باستخدام channels
+    const postsChannel = supabase
+      .channel('public:posts')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'posts' 
+      }, payload => {
+        console.log('منشور جديد:', payload);
+      })
+      .subscribe();
     
-    await supabase.from('likes').on('INSERT', payload => {
-      console.log('إعجاب جديد:', payload);
-    }).subscribe();
+    const likesChannel = supabase
+      .channel('public:likes')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'likes' 
+      }, payload => {
+        console.log('إعجاب جديد:', payload);
+      })
+      .subscribe();
     
-    await supabase.from('comments').on('INSERT', payload => {
-      console.log('تعليق جديد:', payload);
-    }).subscribe();
+    const commentsChannel = supabase
+      .channel('public:comments')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'comments' 
+      }, payload => {
+        console.log('تعليق جديد:', payload);
+      })
+      .subscribe();
     
     console.log('تم تفعيل الوقت الفعلي');
   } catch (error) {
