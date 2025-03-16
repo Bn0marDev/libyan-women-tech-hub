@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -23,17 +22,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // التحقق من حالة المصادقة عند تحميل التطبيق
   useEffect(() => {
     const fetchUser = async () => {
       setLoading(true);
       try {
-        // الحصول على المستخدم الحالي
         const { data: { user } } = await supabase.auth.getUser();
         setUser(user);
 
         if (user) {
-          // الحصول على ملف المستخدم الشخصي
           const { data: profile } = await supabase
             .from("profiles")
             .select("*")
@@ -51,7 +47,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     fetchUser();
 
-    // إعداد مستمع لتغييرات حالة المصادقة
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -76,7 +71,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // تسجيل الدخول
   const signIn = async (email: string, password: string) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -90,6 +84,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error };
       }
       
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+          
+        setProfile(profile);
+      }
+      
       return { error: null };
     } catch (error: any) {
       toast({
@@ -101,10 +105,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // إنشاء حساب جديد
   const signUp = async (email: string, password: string, username: string) => {
     try {
-      // التحقق من وجود اسم المستخدم
       const { data: existingUser } = await supabase
         .from("profiles")
         .select("username")
@@ -120,7 +122,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: { message: "اسم المستخدم موجود بالفعل" } };
       }
 
-      // إنشاء المستخدم
       const { error } = await supabase.auth.signUp({ 
         email, 
         password, 
@@ -156,7 +157,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // تسجيل الخروج
   const signOut = async () => {
     await supabase.auth.signOut();
     toast({

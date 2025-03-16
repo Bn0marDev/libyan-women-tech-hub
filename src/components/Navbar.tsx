@@ -1,4 +1,3 @@
-
 import { useAuth } from "@/context/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -41,17 +40,59 @@ const Navbar = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
 
-  // في المستقبل، يمكن إضافة وظيفة لجلب الإشعارات
   const fetchNotifications = async () => {
     if (!user) return;
     
-    // هنا يمكن إضافة المنطق لجلب إشعارات المستخدم من قاعدة البيانات
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+        
+      if (error) throw error;
+      
+      setNotifications(data || []);
+      setHasUnreadNotifications(data?.some(notif => !notif.read));
+    } catch (error) {
+      console.error("خطأ في جلب الإشعارات:", error);
+    }
+  };
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      await supabase
+        .from("notifications")
+        .update({ read: true })
+        .eq("id", notificationId);
+        
+      await fetchNotifications();
+    } catch (error) {
+      console.error("خطأ في تحديث حالة الإشعار:", error);
+    }
   };
 
   useEffect(() => {
-    fetchNotifications();
-    
-    // في المستقبل، يمكن إضافة مستمع للإشعارات في الوقت الفعلي
+    if (user) {
+      fetchNotifications();
+      
+      const notificationsChannel = supabase
+        .channel('public:notifications')
+        .on('postgres_changes', { 
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        }, () => {
+          fetchNotifications();
+        })
+        .subscribe();
+        
+      return () => {
+        supabase.removeChannel(notificationsChannel);
+      };
+    }
   }, [user]);
 
   return (
@@ -64,7 +105,6 @@ const Navbar = () => {
             </Link>
           </div>
 
-          {/* قائمة سطح المكتب */}
           <div className="hidden md:flex items-center space-x-4 rtl:space-x-reverse">
             <ThemeToggle />
             {user ? (
@@ -73,7 +113,6 @@ const Navbar = () => {
                   <Link to="/">الرئيسية</Link>
                 </Button>
                 
-                {/* زر الإشعارات */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative" size="icon">
@@ -92,7 +131,7 @@ const Navbar = () => {
                       </div>
                     ) : (
                       notifications.map((notification) => (
-                        <DropdownMenuItem key={notification.id}>
+                        <DropdownMenuItem key={notification.id} onClick={() => markNotificationAsRead(notification.id)}>
                           {/* محتوى الإشعار */}
                         </DropdownMenuItem>
                       ))
@@ -143,7 +182,6 @@ const Navbar = () => {
             )}
           </div>
 
-          {/* زر القائمة للموبايل */}
           <div className="md:hidden flex items-center">
             <ThemeToggle />
             <Button variant="ghost" onClick={toggleMobileMenu} size="icon">
@@ -153,7 +191,6 @@ const Navbar = () => {
         </div>
       </div>
 
-      {/* قائمة الموبايل */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white dark:bg-gray-900 py-2 px-4 shadow-lg">
           {user ? (

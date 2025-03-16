@@ -4,7 +4,10 @@ import { useAuth } from "@/context/AuthContext";
 import Navbar from "@/components/Navbar";
 import { motion } from "framer-motion";
 import WelcomeMessage from "@/components/WelcomeMessage";
-import PostList from "@/components/posts/PostList";
+import { lazy, Suspense } from "react";
+
+// استخدام التحميل المتأخر للمكونات الثقيلة
+const PostList = lazy(() => import("@/components/posts/PostList"));
 
 const Index = () => {
   const { user } = useAuth();
@@ -17,7 +20,14 @@ const Index = () => {
       <div className="container mx-auto py-8 px-4">
         <div className="max-w-3xl mx-auto">
           <WelcomeMessage />
-          <PostList />
+          <Suspense fallback={
+            <div className="animate-pulse">
+              <div className="h-48 bg-gray-200 rounded-lg dark:bg-gray-700 mb-4"></div>
+              <div className="h-48 bg-gray-200 rounded-lg dark:bg-gray-700"></div>
+            </div>
+          }>
+            <PostList />
+          </Suspense>
         </div>
       </div>
       
